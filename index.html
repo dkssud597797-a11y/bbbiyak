@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
+    <title>도파민 20초 : 삐약 어택</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+        body, html { width: 100%; height: 100%; background-color: #f5f7fa; font-family: -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; }
+        
+        #gameContainer { 
+            position: relative; width: 100%; height: 100%; max-width: 450px; max-height: 850px; 
+            background: #fffbfa; box-shadow: 0 10px 30px rgba(0,0,0,0.05); display: flex; flex-direction: column; 
+        }
+        
+        #comboBadge {
+            position: absolute; top: 70px; left: 50%; transform: translateX(-50%) scale(0);
+            background: linear-gradient(135deg, #ff4757, #ff6b81); color: white;
+            padding: 6px 16px; border-radius: 20px; font-weight: bold; font-size: 1.2rem;
+            box-shadow: 0 4px 10px rgba(255,71,87,0.4); z-index: 10; transition: transform 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.5);
+        }
+        #comboBadge.active { transform: translateX(-50%) scale(1); }
+        
+        .hud { padding: 15px 20px; background: #fff; border-bottom: 1px solid #f2f4f6; display: flex; justify-content: space-between; font-weight: bold; font-size: 1.1rem; z-index: 5; }
+        #scoreDisplay { color: #ff9f43; transition: color 0.1s; }
+        #timeDisplay { color: #ff4757; }
+        
+        .grid-container {
+            flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+            gap: 18px; padding: 25px; background: #fcd784; align-content: center;
+        }
+        
+        .hole {
+            background: #653b1b; border-radius: 50%; aspect-ratio: 1; position: relative;
+            overflow: hidden; border: 5px solid #4a2a12; box-shadow: inset 0 14px 10px rgba(0,0,0,0.5);
+            cursor: pointer; transition: background-color 0.1s ease;
+        }
+        
+        .hole.error-flash { background-color: #ff4757 !important; }
+        
+        .hole::after {
+            content: "❌"; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0);
+            font-size: 2rem; opacity: 0; pointer-events: none; transition: transform 0.1s ease, opacity 0.1s ease; z-index: 10;
+        }
+        .hole.error-flash::after { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        
+        .chick {
+            position: absolute; bottom: -115%; left: 15%; width: 70%; height: 70%; 
+            background: #ffeaa7; border-radius: 50%; 
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            pointer-events: none; 
+            transition: bottom 0.12s cubic-bezier(0.175, 0.885, 0.32, 1.2);
+            box-shadow: inset -3px -5px 0px rgba(254, 202, 87, 0.7), 0 3px 5px rgba(0,0,0,0.1);
+        }
+        .chick.up { bottom: 15%; }
+        
+        /* 🐥 페이스 라인 정렬 보정 */
+        .chick-face { position: relative; width: 100%; height: 35%; display: flex; justify-content: center; align-items: center; gap: 14px; }
+        
+        /* 눈 정렬 및 기준점 설정 */
+        .chick-eye { position: relative; width: 7px; height: 7px; background: #2d3436; border-radius: 50%; }
+        
+        /* 🎨 [수정] 볼터치를 눈의 자식 요소로 배치하여 정확히 눈 아래 정중앙에 대칭 정렬 */
+        .chick-blush {
+            position: absolute;
+            top: 10px; /* 눈 아래 거리 조절 */
+            left: 50%;
+            transform: translateX(-50%);
+            width: 8px;
+            height: 5px;
+            background: #ff7675;
+            border-radius: 50%;
+            opacity: 0.8;
+        }
+        
+        .chick-beak { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid #ff9f43; margin-top: 2px; z-index: 2; }
+        
+        .chick-wing { position: absolute; width: 7px; height: 10px; background: #ffeaa7; border-radius: 50%; top: 52%; left: -3px; transform-origin: right center; animation: wingMove 0.18s infinite alternate; }
+        .chick-wing.right { left: auto; right: -3px; transform-origin: left center; }
+        
+        @keyframes wingMove {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(30deg); }
+        }
+
+        .chick.hit { background: #fab1a0 !important; transform: scale(0.95); }
+        .chick.hit .chick-face { display: none; } 
+        .chick.hit .chick-beak { display: none; }
+        .chick.hit::before { content: "💧💧"; font-size: 0.8rem; font-weight: bold; color: #2d3436; }
+        .chick.hit .chick-wing { animation: none; }
+
+        .screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(25, 31, 40, 0.97); display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; z-index: 100; padding: 30px; text-align: center; }
+        .screen.hidden { display: none !important; }
+        .screen h1 { font-size: 2.1rem; margin-bottom: 15px; color: #ffeaa7; font-weight: 800; letter-spacing: -0.5px; }
+        .screen p { font-size: 1rem; color: #b0b8c1; line-height: 1.6; margin-bottom: 30px; }
+        
+        .btn-group { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 280px; }
+        .btn { padding: 16px; border: none; color: #fff; font-size: 1.1rem; font-weight: bold; border-radius: 12px; cursor: pointer; width: 100%; }
+        #startBtn { background: #3182f6; box-shadow: 0 4px 12px rgba(49, 130, 246, 0.3); }
+        #startBtn:disabled { background: #cbd5e1; color: #94a3b8; box-shadow: none; cursor: not-allowed; }
+        
+        #inviteBtn { background: #00c73c; display: none; }
+        #confirmBtn { background: #ff9f43; display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="gameContainer">
+        <div id="comboBadge">0 COMBO 🔥</div>
+
+        <div class="hud">
+            <div id="scoreDisplay">🐥 점수: 0</div>
+            <div id="timeDisplay">⏱️ 시간: 20초</div>
+        </div>
+        
+        <div class="grid-container">
+            <!-- 각 구멍 및 완벽 대칭 볼터치 병아리 인젝트 -->
+            <div class="hole" data-idx="0"><div class="chick"><div class="chick-wing"></div><div class="chick-face"><div class="chick-eye"><div class="chick-blush"></div></div><div class="chick-eye"><div class="chick-blush"></div></div></div><div class="chick-beak"></div><div class="chick-wing right"></div></div></div>
+            <div class="hole" data-idx="1"><div class="chick"><div class="chick-wing"></div><div class="chick-face"><div class="chick-eye"><div class="chick-blush"></div></div><div class="chick-eye"><div class="chick-blush"></div></div></div><div class="chick-beak"></div><div class="chick-wing right"></div></div></div>
+            <div class="hole" data-idx="2"><div class="chick"><div class="chick-wing"></div><div class="chick-face"><div class="chick-eye"><div class="chick-blush"></div></div><div class="chick-eye"><div class="chick-blush"></div></div></div><div class="chick-beak"></div><div class="chick-wing right"></div></div></div>
+            <div class="hole" data-idx="3"><div class="chick"><div class="chick-wing"></div><div class="chick-face"><div class="chick-eye"><div class="chick-blush"></div></div><div class="chick-eye"><div class="chick-blush"></div></div></div><div class="chick-beak"></div><div class="chick-wing right"></div></div></div>
+            <div class="hole" data-idx="4"><div class="chick"><div class="chick-wing"></div><div class="chick-face"><div class="chick-eye"><div class="chick-blush"></div></div><div class="chick-eye"><div class="chick-blush"></div></div></div><div class="chick-beak"></div><div class="chick-wing right"></div></div></div>
+            <div class="hole" data-idx="5"><div class="chick"><div class="chick-wing"></div><div class="chick-face"><div class="chick-eye"><div class="chick-blush"></div></div><div class="chick-eye"><div class="chick-blush"></div></div></div><div class="chick-beak"></div><div class="chick-wing right"></div></div></div>
+            <div class="hole" data-idx="6"><div class="chick"><div class="chick-wing"></div><div class="chick-face"><div class="chick-eye"><div class="chick-blush"></div></div><div class="chick-eye"><div class="chick-blush"></div></div></div><div class="chick-beak"></div><div class="chick-wing right"></div></div></div>
+            <div class="hole" data-idx="7"><div class="chick"><div class="chick-wing"></div><div class="chick-face"><div class="chick-eye"><div class="chick-blush"></div></div><div class="chick-eye"><div class="chick-blush"></div></div></div><div class="chick-beak"></div><div class="chick-wing right"></div></div></div>
+            <div class="hole" data-idx="8"><div class="chick"><div class="chick-wing"></div><div class="chick-face"><div class="chick-eye"><div class="chick-blush"></div></div><div class="chick-eye"><div class="chick-blush"></div></div></div><div class="chick-beak"></div><div class="chick-wing right"></div></div></div>
+        </div>
+
+        <div class="screen" id="menuScreen">
+            <h1 id="menuTitle">도파민 20초 : 삐약 어택</h1>
+            <p id="menuText">
+                제한시간 20초 동안 굴에서 튀어나오는<br>동글이 삐약이들을 정확하게 터치하세요!<br><br>
+                ⏱️ <b>미션:</b> 20초 동안 최대한 많은 점수를 획득하세요!<br>
+                ⚠️ <b>주의:</b> 삐약이가 없는 빈 구멍 터치 시 <b>❌ 경고 알림!</b>
+            </p>
+            <div class="btn-group">
+                <button class="btn" id="startBtn">기록 도전하기</button>
+                <button class="btn" id="inviteBtn">✉️ 친구 초대하고 +1판 더 하기</button>
+                <button class="btn" id="confirmBtn">🔍 공유 완료 확인하기</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const holes = document.querySelectorAll('.hole');
+        const comboBadge = document.getElementById('comboBadge');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const timeDisplay = document.getElementById('timeDisplay');
+        const menuScreen = document.getElementById('menuScreen');
+        const menuTitle = document.getElementById('menuTitle');
+        const menuText = document.getElementById('menuText');
+        const startBtn = document.getElementById('startBtn');
+        const inviteBtn = document.getElementById('inviteBtn');
+        const confirmBtn = document.getElementById('confirmBtn');
+
+        let score = 0;
+        let timeLeft = 20;
+        let gameTimer = null;
+        let isPlaying = false;
+        let lastHoleIdx = -1;
+        
+        let combo = 0; 
+        let dailyChances = 1;      
+        let inviteBonusCount = 0;  
+        let todayRewardTotal = 0; 
+        let playCount = 0; 
+        
+        let isCheckingShare = false; 
+        let userLeftApp = false; 
+
+        function getTodayString() {
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+
+        try {
+            const lastDate = localStorage.getItem('chick_date_v22');
+            const savedBonus = parseInt(localStorage.getItem('chick_bonus_count_v22')) || 0;
+            const savedReward = parseInt(localStorage.getItem('chick_today_reward_v22')) || 0;
+            const savedPlays = parseInt(localStorage.getItem('chick_play_count_v22')) || 0;
+            
+            if (lastDate === getTodayString()) {
+                inviteBonusCount = savedBonus;
+                todayRewardTotal = savedReward;
+                playCount = savedPlays;
+                dailyChances = 0; 
+            } else {
+                localStorage.setItem('chick_date_v22', getTodayString());
+                localStorage.setItem('chick_bonus_count_v22', '0');
+                localStorage.setItem('chick_today_reward_v22', '0');
+                localStorage.setItem('chick_play_count_v22', '0');
+                inviteBonusCount = 0;
+                todayRewardTotal = 0;
+                playCount = 0;
+                dailyChances = 1;
+            }
+        } catch(e) {
+            dailyChances = 1;
+            inviteBonusCount = 0;
+            todayRewardTotal = 0;
+            playCount = 0;
+        }
+
+        function updateUI() {
+            if (dailyChances > 0) {
+                startBtn.disabled = false;
+                startBtn.innerText = "기록 도전하기";
+                inviteBtn.style.display = "none";
+                confirmBtn.style.display = "none";
+            } else {
+                startBtn.disabled = true;
+                startBtn.innerText = "도전 기회 소진";
+                
+                if (inviteBonusCount < 10) {
+                    if (!isCheckingShare) {
+                        inviteBtn.style.display = "block";
+                        confirmBtn.style.display = "none";
+                    } else {
+                        inviteBtn.style.display = "none";
+                        confirmBtn.style.display = "block";
+                    }
+                } else {
+                    inviteBtn.style.display = "none";
+                    confirmBtn.style.display = "none";
+                    menuTitle.innerText = "💡 안내";
+                    menuTitle.style.color = "#ff4757";
+                    menuText.innerHTML = "오늘 제공된 참여 기회와 초대 보너스를 모두 사용하셨습니다.<br><br><b>내일 다시 도전해 주세요! 🐥</b>";
+                }
+            }
+        }
+
+        updateUI();
+
+        function randomHole() {
+            const idx = Math.floor(Math.random() * holes.length);
+            if (idx === lastHoleIdx) return randomHole();
+            lastHoleIdx = idx;
+            return holes[idx];
+        }
+
+        function showChick() {
+            if (!isPlaying) return;
+            const targetHole = randomHole();
+            const targetChick = targetHole.querySelector('.chick');
+            
+            targetChick.classList.remove('hit');
+            targetChick.classList.add('up');
+
+            const stayTime = Math.random() * 400 + 700; 
+            setTimeout(() => {
+                if (targetChick.classList.contains('up') && !targetChick.classList.contains('hit')) {
+                    resetCombo();
+                }
+                targetChick.classList.remove('up');
+                if (isPlaying) showChick();
+            }, stayTime);
+        }
+
+        function startGame() {
+            if (dailyChances <= 0) return;
+
+            score = 0;
+            timeLeft = 20;
+            combo = 0;
+            isPlaying = true;
+            scoreDisplay.innerText = `🐥 점수: 0`;
+            timeDisplay.innerText = `⏱️ 시간: ${timeLeft}초`;
+            menuScreen.classList.add('hidden');
+
+            showChick();
+            showChick();
+
+            gameTimer = setInterval(() => {
+                timeLeft--;
+                timeDisplay.innerText = `⏱️ 시간: ${timeLeft}초`;
+                if (timeLeft <= 0) endGame();
+            }, 1000);
+        }
+
+        function resetCombo() {
+            combo = 0;
+            comboBadge.classList.remove('active');
+        }
+
+        function handleHoleClick(e, hole) {
+            if (!isPlaying) return;
+            if (e.type === 'mousedown' && 'ontouchstart' in window) return;
+
+            const chick = hole.querySelector('.chick');
+
+            if (chick.classList.contains('up') && !chick.classList.contains('hit')) {
+                combo++;
+                let bonus = 1 + Math.floor(combo / 3); 
+                score += bonus;
+                scoreDisplay.innerText = `🐥 점수: ${score}`;
+                
+                if (combo >= 2) {
+                    comboBadge.innerText = `${combo} COMBO 🔥`;
+                    comboBadge.classList.add('active');
+                }
+
+                chick.classList.add('hit');
+                setTimeout(() => { chick.classList.remove('up'); }, 100);
+            } 
+            else {
+                resetCombo();
+                if (score > 0) {
+                    score--; 
+                }
+                
+                scoreDisplay.innerText = `🐥 점수: ${score}`;
+                
+                hole.classList.add('error-flash');
+                setTimeout(() => {
+                    hole.classList.remove('error-flash');
+                }, 200);
+            }
+        }
+
+        holes.forEach(hole => {
+            hole.addEventListener('mousedown', (e) => handleHoleClick(e, hole));
+            hole.addEventListener('touchstart', (e) => {
+                e.preventDefault(); 
+                handleHoleClick(e, hole);
+            }, { passive: false });
+        });
+
+        function endGame() {
+            isPlaying = false;
+            clearInterval(gameTimer);
+            resetCombo();
+            document.querySelectorAll('.chick').forEach(c => c.classList.remove('up'));
+
+            dailyChances = 0; 
+            isCheckingShare = false; 
+            userLeftApp = false;
+            
+            playCount++; 
+            try { localStorage.setItem('chick_play_count_v22', playCount.toString()); } catch(e) {}
+
+            if (score <= 0) {
+                menuTitle.innerText = "😥 아쉬워요...";
+                menuTitle.style.color = "#ff4757";
+                menuText.innerHTML = `최종 점수: <b>0점</b><br><br>` +
+                                     `삐약이를 한 마리도 획득하지 못했습니다.<br>` +
+                                     `다음 판에는 기회를 놓치지 말고 터치해 보세요!<br><br>` +
+                                     `친구를 초대하면 보너스 판이 제공됩니다 🏃‍♂️`;
+            } 
+            else {
+                if (todayRewardTotal >= 100) {
+                    menuTitle.innerText = "🎉 미션 완료!";
+                    menuTitle.style.color = "#ffd32a";
+                    menuText.innerHTML = `최종 점수: <b>${score}점</b><br><br>` +
+                                         `✨ 대단해요! 오늘 준비된 행운 보상을 모두 획득하셨습니다!<br><br>` +
+                                         `내일의 삐약 어택도 기대해 주세요! 🐥`;
+                } else {
+                    let finalAddedReward = 10; 
+                    
+                    if (score >= 1 && score <= 50) {
+                        finalAddedReward = 3;  
+                    } else if (score >= 51 && score <= 180) {
+                        finalAddedReward = 8;  
+                    } else if (score >= 181) {
+                        finalAddedReward = 15; 
+                    }
+
+                    let allowedMaxCumulative = playCount * 15; 
+                    if (playCount >= 9) allowedMaxCumulative = 100; 
+
+                    if (todayRewardTotal + finalAddedReward > allowedMaxCumulative) {
+                        finalAddedReward = allowedMaxCumulative - todayRewardTotal;
+                        if (finalAddedReward < 0) finalAddedReward = 0; 
+                    }
+
+                    if (todayRewardTotal + finalAddedReward > 100) {
+                        finalAddedReward = 100 - todayRewardTotal;
+                    }
+
+                    todayRewardTotal += finalAddedReward;
+                    try {
+                        localStorage.setItem('chick_today_reward_v22', todayRewardTotal.toString());
+                    } catch(e) {}
+
+                    menuTitle.innerText = "🎉 미션 완료!";
+                    menuTitle.style.color = "#ffd32a";
+                    menuText.innerHTML = `최종 점수: <b>${score}점</b><br><br>` +
+                                         `축하합니다! 이번 판 미션 완료 보상으로<br>` +
+                                         `<b style="font-size:1.4rem; color:#22c55e;">+${finalAddedReward}원</b>이 적립되었습니다 💸<br><br>` +
+                                         `친구를 초대하고 다음 보너스 기회를 열어보세요!`;
+                }
+            }
+            
+            updateUI(); 
+            menuScreen.classList.remove('hidden');
+        }
+
+        inviteBtn.onclick = function() {
+            if (inviteBonusCount >= 10) return;
+            
+            try { 
+                navigator.clipboard.writeText(window.location.href + "?invite=true"); 
+            } catch(err) {}
+            
+            alert("🔗 초대 링크가 복사되었습니다!\n\n친구 대화창에 링크를 전송한 뒤 돌아와서 [공유 완료 확인하기]를 눌러주세요.");
+            
+            isCheckingShare = true; 
+            userLeftApp = false; 
+            updateUI();
+        };
+
+        window.addEventListener('blur', function() {
+            if (isCheckingShare) {
+                userLeftApp = true; 
+            }
+        });
+
+        confirmBtn.onclick = function() {
+            if (!userLeftApp) {
+                alert("⚠️ 친구초대 링크를 복사한 뒤, 진짜로 공유하고 돌아와주셔야 인정됩니다!");
+                return;
+            }
+
+            isCheckingShare = false; 
+            userLeftApp = false;
+            inviteBonusCount++; 
+            dailyChances = 1;    
+            
+            try { localStorage.setItem('chick_bonus_count_v22', inviteBonusCount.toString()); } catch(e) {}
+            
+            menuTitle.innerText = "✉️ 충전 완료!";
+            menuTitle.style.color = "#00c73c";
+            menuText.innerHTML = `보너스 기회가 리필되었습니다!<br>새로운 도전을 이어서 시작해 보세요! 🐥`;
+            updateUI();
+        };
+
+        startBtn.onclick = function() { startGame(); };
+    </script>
+</body>
+</html>
